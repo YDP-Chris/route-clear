@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { COLORS, SPEEDS, TIMING, LAYOUT, PARALLAX, SCORING, LANES } from '../config/constants.js';
+import { IED_TYPES, SPAWN_CONFIG } from '../config/iedConfig.js';
 import { Husky } from '../entities/Husky.js';
 import { IED } from '../entities/IED.js';
 import { DetectionSystem } from '../systems/DetectionSystem.js';
@@ -26,6 +27,10 @@ export class GameScene extends Phaser.Scene {
       streak: 0,
       blueFalcons: 0
     };
+
+    // Track which IED types player has seen (for tutorial hints)
+    this.seenTypes = new Set();
+    this.currentDifficultyLevel = 0;
   }
 
   create() {
@@ -157,37 +162,114 @@ export class GameScene extends Phaser.Scene {
     if (!this.gameState.isPlaying) return;
 
     const width = this.cameras.main.width;
+    const distance = this.gameState.distance;
+
+    // Get current difficulty level based on distance
+    let diffLevel = SPAWN_CONFIG.difficultyLevels[0];
+    for (let i = 0; i < SPAWN_CONFIG.difficultyLevels.length; i++) {
+      if (distance >= SPAWN_CONFIG.difficultyLevels[i].distance) {
+        diffLevel = SPAWN_CONFIG.difficultyLevels[i];
+        this.currentDifficultyLevel = i;
+      }
+    }
+
+    // Choose IED type based on available types and weights
+    const type = this.chooseIEDType(diffLevel.types);
 
     // Choose a random lane
     const lane = Phaser.Math.Between(0, LANES.COUNT - 1);
     const x = width * LANES.POSITIONS[lane];
     const y = -50;
 
-    const ied = new IED(this, x, y, 'cwied');
-    ied.lane = lane; // Store lane for reference
+    const ied = new IED(this, x, y, type);
+    ied.lane = lane;
     this.activeIEDs.push(ied);
 
-    // Randomize next spawn time based on difficulty
-    const difficultyFactor = Math.min(this.gameState.distance / 5000, 1);
-    const minDelay = TIMING.IED_SPAWN_MIN * (1 - difficultyFactor * 0.3);
-    const maxDelay = TIMING.IED_SPAWN_MAX * (1 - difficultyFactor * 0.4);
+    // Show tutorial hint for new IED types
+    if (!this.seenTypes.has(type)) {
+      this.seenTypes.add(type);
+      this.showTypeHint(type);
+    }
 
-    this.spawnTimer.delay = minDelay + Math.random() * (maxDelay - minDelay);
+    // Adjust spawn timer based on difficulty
+    const baseDelay = TIMING.IED_SPAWN_MIN + Math.random() * (TIMING.IED_SPAWN_MAX - TIMING.IED_SPAWN_MIN);
+    this.spawnTimer.delay = baseDelay * (1 - diffLevel.spawnRate * 0.5);
 
     // Occasionally spawn double IEDs at higher difficulty
+    const difficultyFactor = Math.min(distance / 5000, 1);
     if (difficultyFactor > 0.5 && Math.random() < 0.2) {
-      // Spawn another IED in a different lane
       const otherLane = (lane + Phaser.Math.Between(1, 2)) % LANES.COUNT;
       const otherX = width * LANES.POSITIONS[otherLane];
+      const otherType = this.chooseIEDType(diffLevel.types);
 
       this.time.delayedCall(200, () => {
         if (this.gameState.isPlaying) {
-          const ied2 = new IED(this, otherX, -50, 'cwied');
+          const ied2 = new IED(this, otherX, -50, otherType);
           ied2.lane = otherLane;
           this.activeIEDs.push(ied2);
+
+          if (!this.seenTypes.has(otherType)) {
+            this.seenTypes.add(otherType);
+            this.showTypeHint(otherType);
+          }
         }
       });
     }
+  }
+
+  chooseIEDType(availableTypes) {
+    // Weighted random selection
+    const weights = availableTypes.map(t => SPAWN_CONFIG.typeWeights[t] || 1.0);
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    let random = Math.random() * totalWeight;
+
+    for (let i = 0; i < availableTypes.length; i++) {
+      random -= weights[i];
+      if (random <= 0) {
+        return availableTypes[i];
+      }
+    }
+
+    return availableTypes[0];
+  }
+
+  showTypeHint(type) {
+    const config = IED_TYPES[type.toUpperCase()];
+    if (!config || !config.hint) return;
+
+    const width = this.cameras.main.width;
+    const height = this.cameras.main.height;
+
+    // Pause briefly to show hint
+    const hintBg = this.add.rectangle(width / 2, height * 0.3, width * 0.9, 80, 0x000000, 0.8);
+    hintBg.setStrokeStyle(2, config.color.warning);
+
+    const hintTitle = this.add.text(width / 2, height * 0.3 - 15, 'NEW THREAT', {
+      fontSize: '16px',
+      fontFamily: 'Arial',
+      color: '#FFAA00',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    const hintText = this.add.text(width / 2, height * 0.3 + 15, config.hint, {
+      fontSize: '18px',
+      fontFamily: 'Arial',
+      color: '#FFFFFF'
+    }).setOrigin(0.5);
+
+    // Fade out after delay
+    this.time.delayedCall(3000, () => {
+      this.tweens.add({
+        targets: [hintBg, hintTitle, hintText],
+        alpha: 0,
+        duration: 500,
+        onComplete: () => {
+          hintBg.destroy();
+          hintTitle.destroy();
+          hintText.destroy();
+        }
+      });
+    });
   }
 
   updateIEDs(time, delta) {
@@ -225,10 +307,48 @@ export class GameScene extends Phaser.Scene {
         this.hud.showMessage(`${result.count}x IEDs NEUTRALIZED!`, COLORS.THREAT_SAFE);
       }
       // Individual neutralization messages handled by onIEDNeutralized
+    } else if (result.blocked && result.blocked.length > 0) {
+      // Show why scan was blocked
+      this.showBlockedScan(result.blocked[0]);
     } else {
       // Show miss feedback
       this.showScanMiss();
     }
+  }
+
+  showBlockedScan(ied) {
+    const config = ied.config;
+    let message = 'SCAN BLOCKED';
+    let color = 0xFF6666;
+
+    if (config.requiresSignal) {
+      message = 'WAIT FOR SIGNAL!';
+      color = 0x00FFFF;
+    } else if (config.maxSpeedToScan) {
+      message = 'TOO FAST! SLOW DOWN!';
+      color = 0xFF6600;
+    }
+
+    const text = this.add.text(this.husky.x, this.husky.y - 80, message, {
+      fontSize: '18px',
+      fontFamily: 'Arial Black',
+      color: Phaser.Display.Color.IntegerToColor(color).rgba,
+      stroke: '#000000',
+      strokeThickness: 3
+    });
+    text.setOrigin(0.5);
+
+    this.tweens.add({
+      targets: text,
+      y: text.y - 40,
+      alpha: 0,
+      duration: 800,
+      ease: 'Power2',
+      onComplete: () => text.destroy()
+    });
+
+    // Play warning sound
+    this.audioManager.playWarning();
   }
 
   showScanMiss() {
@@ -304,15 +424,19 @@ export class GameScene extends Phaser.Scene {
     this.gameState.casualties++;
     this.gameState.streak = 0;
 
+    const isVBIED = ied.config.instantKill;
+    const blastRadius = ied.config.blastRadius || 100;
+
     // Show feedback
-    this.hud.showMessage('IED DETONATED - CASUALTY', COLORS.THREAT_CRITICAL);
+    const message = isVBIED ? 'VBIED DETONATED - CATASTROPHIC' : 'IED DETONATED - CASUALTY';
+    this.hud.showMessage(message, COLORS.THREAT_CRITICAL);
     this.audioManager.playExplosion();
 
-    // Create explosion effect
-    this.createExplosion(ied.x, ied.y);
+    // Create explosion effect (bigger for VBIED)
+    this.createExplosion(ied.x, ied.y, isVBIED ? 2.0 : 1.0);
 
-    // Screen shake
-    this.cameras.main.shake(500, 0.02);
+    // Screen shake (more intense for VBIED)
+    this.cameras.main.shake(isVBIED ? 800 : 500, isVBIED ? 0.04 : 0.02);
 
     // Remove from active
     const index = this.activeIEDs.indexOf(ied);
@@ -320,9 +444,9 @@ export class GameScene extends Phaser.Scene {
       this.activeIEDs.splice(index, 1);
     }
 
-    // Check game over
-    if (this.gameState.casualties >= 1) {
-      this.gameOver();
+    // Check game over - VBIED is always instant, others after 1 casualty
+    if (isVBIED || this.gameState.casualties >= 1) {
+      this.gameOver(isVBIED ? 'vbied' : 'detonation');
     }
   }
 
@@ -417,38 +541,39 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  createExplosion(x, y) {
+  createExplosion(x, y, scale = 1.0) {
     const explosion = this.add.image(x, y, 'explosion');
-    explosion.setScale(0.5);
+    explosion.setScale(0.5 * scale);
     explosion.setAlpha(1);
 
     this.tweens.add({
       targets: explosion,
-      scale: 3,
+      scale: 3 * scale,
       alpha: 0,
-      duration: 600,
+      duration: 600 + (scale * 200),
       ease: 'Power2',
       onComplete: () => explosion.destroy()
     });
 
-    // Dust particles
-    for (let i = 0; i < 8; i++) {
-      const angle = (i / 8) * Math.PI * 2;
-      const dust = this.add.circle(x, y, 10, COLORS.DESERT);
+    // Dust particles (more for bigger explosions)
+    const particleCount = Math.floor(8 * scale);
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (i / particleCount) * Math.PI * 2;
+      const dust = this.add.circle(x, y, 10 * scale, COLORS.DESERT);
       this.tweens.add({
         targets: dust,
-        x: x + Math.cos(angle) * 150,
-        y: y + Math.sin(angle) * 150,
+        x: x + Math.cos(angle) * 150 * scale,
+        y: y + Math.sin(angle) * 150 * scale,
         alpha: 0,
         scale: 0.5,
-        duration: 800,
+        duration: 800 + (scale * 200),
         ease: 'Power2',
         onComplete: () => dust.destroy()
       });
     }
   }
 
-  gameOver() {
+  gameOver(reason = 'detonation') {
     this.gameState.isPlaying = false;
 
     // Stop spawning
@@ -465,7 +590,7 @@ export class GameScene extends Phaser.Scene {
         neutralized: this.gameState.neutralized,
         score: this.scoreManager.getScore(),
         blueFalcons: this.gameState.blueFalcons,
-        reason: 'detonation'
+        reason: reason
       });
     });
   }

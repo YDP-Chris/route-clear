@@ -88,13 +88,14 @@ export class DetectionSystem {
 
   performScan() {
     const husky = this.scene.husky;
-    if (!husky) return { success: false, count: 0 };
+    if (!husky) return { success: false, count: 0, blocked: [] };
 
     const detectorPos = husky.getDetectorPosition();
     const ieds = this.scene.activeIEDs;
 
-    // Find ALL IEDs within scan range and neutralize them
+    // Find ALL IEDs within scan range
     const neutralized = [];
+    const blocked = [];  // IEDs that couldn't be scanned (RCIED no signal, PPIED too fast)
 
     for (const ied of ieds) {
       if (!ied.isActive()) continue;
@@ -105,11 +106,16 @@ export class DetectionSystem {
       );
 
       if (distance < this.scanRange) {
-        neutralized.push(ied);
+        // Check if this IED can currently be scanned
+        if (ied.canBeScan()) {
+          neutralized.push(ied);
+        } else {
+          blocked.push(ied);
+        }
       }
     }
 
-    // Neutralize all found IEDs
+    // Neutralize scannable IEDs
     for (const ied of neutralized) {
       ied.neutralize();
     }
@@ -117,7 +123,8 @@ export class DetectionSystem {
     // Return result for feedback
     return {
       success: neutralized.length > 0,
-      count: neutralized.length
+      count: neutralized.length,
+      blocked: blocked  // For showing "TOO FAST" or "WAIT FOR SIGNAL" feedback
     };
   }
 

@@ -26,10 +26,23 @@ export class GameOverScene extends Phaser.Scene {
     // Dark background
     this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a1a);
 
-    // Title - different for Blue Falcon vs Detonation
+    // Title - different based on death reason
     const isBlueFalcon = this.finalData.reason === 'blueFalcon';
-    const title = isBlueFalcon ? 'BLUE FALCON' : 'MISSION FAILED';
-    const titleColor = isBlueFalcon ? '#6699FF' : '#FF4444';
+    const isVBIED = this.finalData.reason === 'vbied';
+
+    let title = 'MISSION FAILED';
+    let titleColor = '#FF4444';
+    let subtitle = null;
+
+    if (isBlueFalcon) {
+      title = 'BLUE FALCON';
+      titleColor = '#6699FF';
+      subtitle = 'Convoy abandoned you';
+    } else if (isVBIED) {
+      title = 'CATASTROPHIC LOSS';
+      titleColor = '#FF0000';
+      subtitle = 'Vehicle bomb destroyed the convoy';
+    }
 
     this.add.text(width / 2, height * 0.15, title, {
       fontFamily: 'Arial Black, Arial',
@@ -40,12 +53,12 @@ export class GameOverScene extends Phaser.Scene {
       strokeThickness: 4
     }).setOrigin(0.5);
 
-    // Blue Falcon subtitle
-    if (isBlueFalcon) {
-      this.add.text(width / 2, height * 0.22, 'Convoy abandoned you', {
+    // Subtitle if applicable
+    if (subtitle) {
+      this.add.text(width / 2, height * 0.22, subtitle, {
         fontFamily: 'Arial',
         fontSize: '20px',
-        color: '#6699FF'
+        color: titleColor
       }).setOrigin(0.5);
     }
 
@@ -122,10 +135,13 @@ export class GameOverScene extends Phaser.Scene {
     line.lineStyle(2, 0x444444);
     line.lineBetween(width * 0.2, statsY + lineHeight * dividerRow, width * 0.8, statsY + lineHeight * dividerRow);
 
-    // Message - different for Blue Falcon
-    const message = isBlueFalcon
-      ? 'The convoy behind you paid the price.\nNo one left behind. Clear every threat.'
-      : 'Every route clearer saves lives.\nTheir vigilance protects all who follow.';
+    // Message - different based on reason
+    let message = 'Every route clearer saves lives.\nTheir vigilance protects all who follow.';
+    if (isBlueFalcon) {
+      message = 'The convoy behind you paid the price.\nNo one left behind. Clear every threat.';
+    } else if (isVBIED) {
+      message = 'VBIEDs are the deadliest threat.\nSpot the parked vehicle. Neutralize it first.';
+    }
 
     this.add.text(width / 2, height * 0.68, message, {
       fontFamily: 'Arial',
