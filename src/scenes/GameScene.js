@@ -75,6 +75,9 @@ export class GameScene extends Phaser.Scene {
     const startY = height * LAYOUT.HUSKY_Y_PERCENT;
     this.husky = new Husky(this, startX, startY);
 
+    // Create convoy vehicles behind Husky
+    this.createConvoy(startX, startY);
+
     // Create UI
     this.hud = new HUD(this);
     this.touchControls = new TouchControls(this);
@@ -143,6 +146,9 @@ export class GameScene extends Phaser.Scene {
 
     // Update husky
     this.husky.update(time, delta);
+
+    // Update convoy following position
+    this.updateConvoyPosition();
 
     // Challenge mode: spawn IEDs based on distance pattern
     if (this.gameMode === 'challenge') {
@@ -795,6 +801,71 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  createConvoy(huskyX, huskyY) {
+    this.convoyVehicles = [];
+    const spacing = 120;
+
+    // Create 3 convoy vehicles following behind
+    for (let i = 0; i < 3; i++) {
+      const vehicle = this.add.image(huskyX, huskyY + spacing * (i + 1), 'convoy_humvee');
+      vehicle.setScale(0.8);
+      vehicle.setDepth(5);
+      vehicle.damaged = false;
+      vehicle.originalY = huskyY + spacing * (i + 1);
+
+      // Add slight bobbing animation
+      this.tweens.add({
+        targets: vehicle,
+        y: vehicle.y + 3,
+        duration: 400 + i * 50,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+
+      this.convoyVehicles.push(vehicle);
+    }
+  }
+
+  damageConvoyVehicle() {
+    // Find first undamaged vehicle
+    for (const vehicle of this.convoyVehicles) {
+      if (!vehicle.damaged) {
+        vehicle.damaged = true;
+
+        // Swap to damaged texture
+        vehicle.setTexture('convoy_humvee_damaged');
+
+        // Shake effect
+        this.tweens.add({
+          targets: vehicle,
+          x: vehicle.x + 5,
+          duration: 50,
+          yoyo: true,
+          repeat: 5
+        });
+
+        // Small explosion at vehicle
+        this.createExplosion(vehicle.x, vehicle.y - 20, 0.5);
+
+        return;
+      }
+    }
+  }
+
+  updateConvoyPosition() {
+    if (!this.convoyVehicles || !this.husky) return;
+
+    // Convoy follows Husky's lane with slight delay
+    for (let i = 0; i < this.convoyVehicles.length; i++) {
+      const vehicle = this.convoyVehicles[i];
+      const targetX = this.husky.x;
+
+      // Smooth following
+      vehicle.x += (targetX - vehicle.x) * 0.03;
+    }
+  }
+
   onBlueFalcon(ied) {
     this.gameState.blueFalcons++;
     this.gameState.streak = 0;
@@ -802,6 +873,9 @@ export class GameScene extends Phaser.Scene {
     // Show BLUE FALCON feedback
     this.hud.showMessage('BLUE FALCON', 0x0066FF);
     this.audioManager.playBlueFalcon();
+
+    // Damage a convoy vehicle
+    this.damageConvoyVehicle();
 
     // Show the blue falcon graphic
     this.showBlueFalconGraphic();

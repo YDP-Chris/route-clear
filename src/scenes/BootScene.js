@@ -43,6 +43,82 @@ export class BootScene extends Phaser.Scene {
     this.createExplosionTexture();
     this.createScanPulseTexture();
     this.createDebrisTextures();
+    this.createConvoyTextures();
+  }
+
+  createConvoyTextures() {
+    // Humvee texture (convoy vehicle)
+    const g = this.make.graphics({ add: false });
+
+    // Shadow
+    g.fillStyle(0x000000, 0.25);
+    g.fillEllipse(40, 48, 70, 12);
+
+    // Wheels
+    g.fillStyle(0x1a1a1a);
+    g.fillCircle(15, 45, 9);
+    g.fillCircle(65, 45, 9);
+
+    // Body
+    g.fillStyle(0x5C5346);
+    g.fillRect(5, 22, 70, 26);
+
+    // Cabin
+    g.fillStyle(0x4A4538);
+    g.fillRect(12, 8, 45, 18);
+
+    // Windshield
+    g.fillStyle(0x2D4A5C);
+    g.fillRect(17, 11, 35, 10);
+
+    // Roof
+    g.fillStyle(0x3D3D35);
+    g.fillRect(20, 2, 25, 8);
+
+    g.generateTexture('convoy_humvee', 80, 55);
+    g.destroy();
+
+    // Damaged humvee
+    const d = this.make.graphics({ add: false });
+
+    // Shadow
+    d.fillStyle(0x000000, 0.25);
+    d.fillEllipse(40, 48, 70, 12);
+
+    // Wheels (one blown)
+    d.fillStyle(0x1a1a1a);
+    d.fillCircle(15, 45, 9);
+    d.fillStyle(0x333333);
+    d.fillCircle(65, 47, 5);
+
+    // Body (damaged, scorched)
+    d.fillStyle(0x3A3530);
+    d.fillRect(5, 22, 70, 26);
+
+    // Scorch marks
+    d.fillStyle(0x222222, 0.7);
+    d.fillCircle(55, 32, 12);
+    d.fillCircle(45, 38, 8);
+
+    // Cabin
+    d.fillStyle(0x2A2520);
+    d.fillRect(12, 8, 45, 18);
+
+    // Cracked windshield
+    d.fillStyle(0x1A2A3C);
+    d.fillRect(17, 11, 35, 10);
+    d.lineStyle(1, 0x4A5A6C, 0.8);
+    d.lineBetween(25, 11, 40, 21);
+    d.lineBetween(35, 11, 25, 21);
+
+    // Smoke
+    d.fillStyle(0x444444, 0.5);
+    d.fillCircle(50, 10, 10);
+    d.fillStyle(0x555555, 0.4);
+    d.fillCircle(55, 0, 7);
+
+    d.generateTexture('convoy_humvee_damaged', 80, 55);
+    d.destroy();
   }
 
   createHuskyTexture() {
