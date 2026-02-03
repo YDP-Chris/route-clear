@@ -8,10 +8,12 @@ export class DetectionSystem {
     this.threatLevel = 'safe';
     this.nearestIEDDistance = Infinity;
     this.scanRange = TIMING.SCAN_RANGE;
+    this.iedsInScanRange = 0;
   }
 
   update(time, delta) {
     this.updateThreatLevel();
+    this.updateIEDsInRange();
   }
 
   updateThreatLevel() {
@@ -57,17 +59,17 @@ export class DetectionSystem {
     }
   }
 
-  performScan() {
+  updateIEDsInRange() {
     const husky = this.scene.husky;
-    if (!husky) return;
+    if (!husky) {
+      this.iedsInScanRange = 0;
+      return;
+    }
 
     const detectorPos = husky.getDetectorPosition();
     const ieds = this.scene.activeIEDs;
+    let count = 0;
 
-    let scannedIED = null;
-    let closestDistance = Infinity;
-
-    // Find IED within scan range
     for (const ied of ieds) {
       if (!ied.isActive()) continue;
 
@@ -76,19 +78,47 @@ export class DetectionSystem {
         ied.x, ied.y
       );
 
-      if (distance < this.scanRange && distance < closestDistance) {
-        closestDistance = distance;
-        scannedIED = ied;
+      if (distance < this.scanRange) {
+        count++;
       }
     }
 
-    if (scannedIED) {
-      // Successful scan - neutralize IED
-      scannedIED.neutralize();
-      return true;
+    this.iedsInScanRange = count;
+  }
+
+  performScan() {
+    const husky = this.scene.husky;
+    if (!husky) return { success: false, count: 0 };
+
+    const detectorPos = husky.getDetectorPosition();
+    const ieds = this.scene.activeIEDs;
+
+    // Find ALL IEDs within scan range and neutralize them
+    const neutralized = [];
+
+    for (const ied of ieds) {
+      if (!ied.isActive()) continue;
+
+      const distance = Phaser.Math.Distance.Between(
+        detectorPos.x, detectorPos.y,
+        ied.x, ied.y
+      );
+
+      if (distance < this.scanRange) {
+        neutralized.push(ied);
+      }
     }
 
-    return false;
+    // Neutralize all found IEDs
+    for (const ied of neutralized) {
+      ied.neutralize();
+    }
+
+    // Return result for feedback
+    return {
+      success: neutralized.length > 0,
+      count: neutralized.length
+    };
   }
 
   getThreatLevel() {
@@ -97,6 +127,10 @@ export class DetectionSystem {
 
   getNearestDistance() {
     return this.nearestIEDDistance;
+  }
+
+  getIEDsInScanRange() {
+    return this.iedsInScanRange;
   }
 
   getWarningProgress() {

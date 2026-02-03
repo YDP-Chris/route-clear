@@ -54,6 +54,12 @@ export class AudioManager {
     console.log('[Audio] Warning tone');
   }
 
+  playMiss() {
+    if (!this.enabled) return;
+    // this.sounds.miss?.play();
+    console.log('[Audio] Scan miss');
+  }
+
   playCritical() {
     if (!this.enabled) return;
     // this.sounds.critical?.play({ loop: true });

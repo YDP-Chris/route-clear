@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { COLORS, SPEEDS, TIMING, LAYOUT, PARALLAX, SCORING } from '../config/constants.js';
+import { COLORS, SPEEDS, TIMING, LAYOUT, PARALLAX, SCORING, LANES } from '../config/constants.js';
 import { Husky } from '../entities/Husky.js';
 import { IED } from '../entities/IED.js';
 import { DetectionSystem } from '../systems/DetectionSystem.js';
@@ -44,12 +44,17 @@ export class GameScene extends Phaser.Scene {
     // Create background layers
     this.scrollManager.createLayers();
 
+    // Create lane markers (subtle visual guides)
+    this.createLaneMarkers();
+
     // Create IED group
     this.ieds = this.add.group();
     this.activeIEDs = [];
 
-    // Create player vehicle
-    this.husky = new Husky(this, width * LAYOUT.HUSKY_X_PERCENT, height * LAYOUT.HUSKY_Y_PERCENT);
+    // Create player vehicle (start in center lane)
+    const startX = width * LANES.POSITIONS[LANES.DEFAULT_LANE];
+    const startY = height * LAYOUT.HUSKY_Y_PERCENT;
+    this.husky = new Husky(this, startX, startY);
 
     // Create UI
     this.hud = new HUD(this);
@@ -78,6 +83,22 @@ export class GameScene extends Phaser.Scene {
     this.events.on('resume', this.onResume, this);
   }
 
+  createLaneMarkers() {
+    const width = this.cameras.main.width;
+    const height = this.cameras.main.height;
+
+    // Subtle lane dividers
+    this.laneMarkers = this.add.graphics();
+    this.laneMarkers.lineStyle(1, 0xFFFFFF, 0.1);
+
+    // Draw lane dividers
+    const laneWidth = (LANES.ROAD_RIGHT - LANES.ROAD_LEFT) * width / LANES.COUNT;
+    for (let i = 1; i < LANES.COUNT; i++) {
+      const x = width * LANES.ROAD_LEFT + laneWidth * i;
+      this.laneMarkers.lineBetween(x, 0, x, height);
+    }
+  }
+
   update(time, delta) {
     if (!this.gameState.isPlaying || this.gameState.isPaused) return;
 
@@ -103,6 +124,9 @@ export class GameScene extends Phaser.Scene {
 
     // Update HUD
     this.hud.update();
+
+    // Update touch controls (lane indicator)
+    this.touchControls.update();
 
     // Update score from distance
     this.scoreManager.addDistancePoints(this.gameState.speed * deltaSeconds);
@@ -132,13 +156,14 @@ export class GameScene extends Phaser.Scene {
     if (!this.gameState.isPlaying) return;
 
     const width = this.cameras.main.width;
-    const height = this.cameras.main.height;
 
-    // Spawn above screen
-    const x = width * 0.4 + Math.random() * width * 0.2;
+    // Choose a random lane
+    const lane = Phaser.Math.Between(0, LANES.COUNT - 1);
+    const x = width * LANES.POSITIONS[lane];
     const y = -50;
 
     const ied = new IED(this, x, y, 'cwied');
+    ied.lane = lane; // Store lane for reference
     this.activeIEDs.push(ied);
 
     // Randomize next spawn time based on difficulty
@@ -147,6 +172,21 @@ export class GameScene extends Phaser.Scene {
     const maxDelay = TIMING.IED_SPAWN_MAX * (1 - difficultyFactor * 0.4);
 
     this.spawnTimer.delay = minDelay + Math.random() * (maxDelay - minDelay);
+
+    // Occasionally spawn double IEDs at higher difficulty
+    if (difficultyFactor > 0.5 && Math.random() < 0.2) {
+      // Spawn another IED in a different lane
+      const otherLane = (lane + Phaser.Math.Between(1, 2)) % LANES.COUNT;
+      const otherX = width * LANES.POSITIONS[otherLane];
+
+      this.time.delayedCall(200, () => {
+        if (this.gameState.isPlaying) {
+          const ied2 = new IED(this, otherX, -50, 'cwied');
+          ied2.lane = otherLane;
+          this.activeIEDs.push(ied2);
+        }
+      });
+    }
   }
 
   updateIEDs(time, delta) {
@@ -169,8 +209,45 @@ export class GameScene extends Phaser.Scene {
   triggerScan() {
     if (!this.gameState.isPlaying) return;
 
-    this.husky.scan();
-    this.detectionSystem.performScan();
+    const didScan = this.husky.scan();
+    if (!didScan) return; // On cooldown
+
+    const result = this.detectionSystem.performScan();
+
+    if (result.success) {
+      // Show success feedback
+      if (result.count > 1) {
+        this.hud.showMessage(`${result.count}x IEDs NEUTRALIZED!`, COLORS.THREAT_SAFE);
+      }
+      // Individual neutralization messages handled by onIEDNeutralized
+    } else {
+      // Show miss feedback
+      this.showScanMiss();
+    }
+  }
+
+  showScanMiss() {
+    // Visual feedback for missed scan
+    const missText = this.add.text(this.husky.x, this.husky.y - 80, 'MISS', {
+      fontSize: '20px',
+      fontFamily: 'Arial Black',
+      color: '#FF6666',
+      stroke: '#000000',
+      strokeThickness: 3
+    });
+    missText.setOrigin(0.5);
+
+    this.tweens.add({
+      targets: missText,
+      y: missText.y - 40,
+      alpha: 0,
+      duration: 600,
+      ease: 'Power2',
+      onComplete: () => missText.destroy()
+    });
+
+    // Play miss sound
+    this.audioManager.playMiss();
   }
 
   onIEDNeutralized(ied) {
@@ -188,11 +265,34 @@ export class GameScene extends Phaser.Scene {
     this.hud.showMessage('IED NEUTRALIZED', COLORS.THREAT_SAFE);
     this.audioManager.playNeutralized();
 
+    // Show floating score
+    this.showFloatingScore(ied.x, ied.y, points);
+
     // Remove from active
     const index = this.activeIEDs.indexOf(ied);
     if (index > -1) {
       this.activeIEDs.splice(index, 1);
     }
+  }
+
+  showFloatingScore(x, y, points) {
+    const scoreText = this.add.text(x, y, `+${points}`, {
+      fontSize: '18px',
+      fontFamily: 'Arial Black',
+      color: '#00FF00',
+      stroke: '#000000',
+      strokeThickness: 3
+    });
+    scoreText.setOrigin(0.5);
+
+    this.tweens.add({
+      targets: scoreText,
+      y: y - 50,
+      alpha: 0,
+      duration: 800,
+      ease: 'Power2',
+      onComplete: () => scoreText.destroy()
+    });
   }
 
   onIEDDetonated(ied) {

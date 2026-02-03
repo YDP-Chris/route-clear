@@ -82,6 +82,17 @@ export const LAYOUT = {
   HUSKY_Y_PERCENT: 0.6    // 60% down game area
 };
 
+export const LANES = {
+  COUNT: 3,
+  // Lane positions as percentage of road width (centered on screen)
+  POSITIONS: [0.35, 0.5, 0.65],  // Left, Center, Right
+  DEFAULT_LANE: 1,               // Start in center lane
+  SWITCH_DURATION: 200,          // ms to switch lanes
+  // Road boundaries
+  ROAD_LEFT: 0.25,
+  ROAD_RIGHT: 0.75
+};
+
 export const PARALLAX = {
   // Scroll speed multipliers (relative to road)
   SKY: 0.1,
