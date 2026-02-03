@@ -549,35 +549,95 @@ export class GameScene extends Phaser.Scene {
   }
 
   createExplosion(x, y, scale = 1.0) {
+    // Main fireball
     const explosion = this.add.image(x, y, 'explosion');
-    explosion.setScale(0.5 * scale);
+    explosion.setScale(0.3 * scale);
     explosion.setAlpha(1);
+    explosion.setDepth(40);
 
     this.tweens.add({
       targets: explosion,
-      scale: 3 * scale,
+      scale: 2.5 * scale,
       alpha: 0,
-      duration: 600 + (scale * 200),
+      duration: 500 + (scale * 200),
       ease: 'Power2',
       onComplete: () => explosion.destroy()
     });
 
-    // Dust particles (more for bigger explosions)
-    const particleCount = Math.floor(8 * scale);
-    for (let i = 0; i < particleCount; i++) {
-      const angle = (i / particleCount) * Math.PI * 2;
-      const dust = this.add.circle(x, y, 10 * scale, COLORS.DESERT);
+    // Secondary flash
+    const flash = this.add.circle(x, y, 30 * scale, 0xFFFFFF, 0.8);
+    flash.setDepth(41);
+    this.tweens.add({
+      targets: flash,
+      scale: 3,
+      alpha: 0,
+      duration: 200,
+      ease: 'Power2',
+      onComplete: () => flash.destroy()
+    });
+
+    // Flying debris
+    const debrisCount = Math.floor(12 * scale);
+    for (let i = 0; i < debrisCount; i++) {
+      const angle = (i / debrisCount) * Math.PI * 2 + Math.random() * 0.3;
+      const speed = 100 + Math.random() * 100;
+      const type = Math.random() > 0.5 ? 'debris_metal' : 'debris_dirt';
+
+      const debris = this.add.image(x, y, type);
+      debris.setScale(0.8 + Math.random() * 0.5);
+      debris.setDepth(35);
+      debris.setAngle(Math.random() * 360);
+
       this.tweens.add({
-        targets: dust,
-        x: x + Math.cos(angle) * 150 * scale,
-        y: y + Math.sin(angle) * 150 * scale,
+        targets: debris,
+        x: x + Math.cos(angle) * speed * scale,
+        y: y + Math.sin(angle) * speed * scale - 30,
+        angle: debris.angle + (Math.random() - 0.5) * 720,
         alpha: 0,
-        scale: 0.5,
-        duration: 800 + (scale * 200),
+        duration: 600 + Math.random() * 400,
         ease: 'Power2',
-        onComplete: () => dust.destroy()
+        onComplete: () => debris.destroy()
       });
     }
+
+    // Smoke plumes
+    const smokeCount = Math.floor(6 * scale);
+    for (let i = 0; i < smokeCount; i++) {
+      const delay = i * 80;
+      this.time.delayedCall(delay, () => {
+        const smoke = this.add.image(
+          x + (Math.random() - 0.5) * 40 * scale,
+          y + (Math.random() - 0.5) * 20,
+          'smoke'
+        );
+        smoke.setScale(0.5);
+        smoke.setAlpha(0.7);
+        smoke.setDepth(30);
+
+        this.tweens.add({
+          targets: smoke,
+          y: smoke.y - 80 - Math.random() * 40,
+          x: smoke.x + (Math.random() - 0.5) * 60,
+          scale: 2 + Math.random(),
+          alpha: 0,
+          duration: 1000 + Math.random() * 500,
+          ease: 'Power1',
+          onComplete: () => smoke.destroy()
+        });
+      });
+    }
+
+    // Dust ring
+    const dustRing = this.add.circle(x, y, 20 * scale, COLORS.DESERT, 0.6);
+    dustRing.setDepth(25);
+    this.tweens.add({
+      targets: dustRing,
+      scale: 4 * scale,
+      alpha: 0,
+      duration: 800,
+      ease: 'Power2',
+      onComplete: () => dustRing.destroy()
+    });
   }
 
   gameOver(reason = 'detonation') {
