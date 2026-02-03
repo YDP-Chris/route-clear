@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { COLORS } from '../config/constants.js';
+import { ScoreManager } from '../systems/ScoreManager.js';
 
 export class GameOverScene extends Phaser.Scene {
   constructor() {
@@ -129,11 +130,44 @@ export class GameOverScene extends Phaser.Scene {
       color: '#FFD700'
     }).setOrigin(1, 0.5);
 
+    // Check and save high score
+    const isNewHighScore = ScoreManager.isHighScore(this.finalData.score);
+    const rank = ScoreManager.saveHighScore({
+      score: this.finalData.score,
+      distance: this.finalData.distance,
+      neutralized: this.finalData.neutralized,
+      date: Date.now()
+    });
+
+    // Show NEW HIGH SCORE if applicable
+    if (isNewHighScore && this.finalData.score > 0) {
+      const highScoreText = this.add.text(width / 2, statsY + lineHeight * (scoreRow + 0.7),
+        rank === 1 ? '★ NEW RECORD! ★' : `★ HIGH SCORE #${rank}! ★`, {
+        fontFamily: 'Arial Black',
+        fontSize: '22px',
+        color: '#FFD700',
+        stroke: '#000000',
+        strokeThickness: 3
+      }).setOrigin(0.5);
+
+      // Pulse animation
+      this.tweens.add({
+        targets: highScoreText,
+        scale: 1.1,
+        duration: 500,
+        yoyo: true,
+        repeat: -1
+      });
+    }
+
     // Divider line
-    const dividerRow = this.finalData.blueFalcons > 0 ? 5 : 4;
+    const dividerRow = this.finalData.blueFalcons > 0 ? 5.5 : 4.5;
     const line = this.add.graphics();
     line.lineStyle(2, 0x444444);
     line.lineBetween(width * 0.2, statsY + lineHeight * dividerRow, width * 0.8, statsY + lineHeight * dividerRow);
+
+    // High Scores list
+    this.showHighScores(width, statsY + lineHeight * (dividerRow + 0.5));
 
     // Message - different based on reason
     let message = 'Every route clearer saves lives.\nTheir vigilance protects all who follow.';
@@ -194,6 +228,37 @@ export class GameOverScene extends Phaser.Scene {
 
     this.input.keyboard.once('keydown-M', () => {
       this.goToMenu();
+    });
+  }
+
+  showHighScores(centerX, startY) {
+    const scores = ScoreManager.getHighScores();
+    if (scores.length === 0) return;
+
+    this.add.text(centerX, startY, 'HIGH SCORES', {
+      fontFamily: 'Arial',
+      fontSize: '16px',
+      fontStyle: 'bold',
+      color: '#888888'
+    }).setOrigin(0.5);
+
+    scores.slice(0, 3).forEach((entry, i) => {
+      const y = startY + 25 + i * 22;
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉';
+      const isCurrentRun = entry.score === this.finalData.score &&
+                          entry.distance === this.finalData.distance;
+
+      this.add.text(centerX - 80, y, `${medal} ${entry.score.toLocaleString()}`, {
+        fontFamily: 'Arial',
+        fontSize: '16px',
+        color: isCurrentRun ? '#FFD700' : '#AAAAAA'
+      }).setOrigin(0, 0.5);
+
+      this.add.text(centerX + 80, y, `${entry.distance}m`, {
+        fontFamily: 'Arial',
+        fontSize: '14px',
+        color: '#666666'
+      }).setOrigin(1, 0.5);
     });
   }
 

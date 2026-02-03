@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { COLORS } from '../config/constants.js';
+import { ScoreManager } from '../systems/ScoreManager.js';
 
 export class MenuScene extends Phaser.Scene {
   constructor() {
@@ -35,8 +36,21 @@ export class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     // Husky silhouette
-    const husky = this.add.image(width / 2, height * 0.5, 'husky');
+    const husky = this.add.image(width / 2, height * 0.48, 'husky');
     husky.setScale(2);
+
+    // High Score display
+    const topScore = ScoreManager.getTopScore();
+    if (topScore > 0) {
+      this.add.text(width / 2, height * 0.62, `BEST: ${topScore.toLocaleString()}`, {
+        fontFamily: 'Arial',
+        fontSize: '24px',
+        fontStyle: 'bold',
+        color: '#FFD700',
+        stroke: '#000000',
+        strokeThickness: 3
+      }).setOrigin(0.5);
+    }
 
     // Tap to start (pulsing)
     const startText = this.add.text(width / 2, height * 0.72, 'TAP TO START', {
