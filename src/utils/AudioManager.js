@@ -7,9 +7,13 @@ export class AudioManager {
     this.enabled = true;
     this.volume = 0.3;
     this.audioContext = null;
+    this.unlocked = false;
 
     // Initialize Web Audio API
     this.initAudio();
+
+    // Set up mobile audio unlock on first interaction
+    this.setupMobileUnlock();
   }
 
   initAudio() {
@@ -19,6 +23,39 @@ export class AudioManager {
       console.warn('Web Audio API not supported');
       this.enabled = false;
     }
+  }
+
+  // Mobile browsers require user gesture to unlock audio
+  setupMobileUnlock() {
+    const unlock = () => {
+      if (this.unlocked) return;
+
+      if (this.audioContext && this.audioContext.state === 'suspended') {
+        this.audioContext.resume().then(() => {
+          this.unlocked = true;
+          // Play a silent buffer to fully unlock on iOS
+          const buffer = this.audioContext.createBuffer(1, 1, 22050);
+          const source = this.audioContext.createBufferSource();
+          source.buffer = buffer;
+          source.connect(this.audioContext.destination);
+          source.start(0);
+        });
+      } else {
+        this.unlocked = true;
+      }
+
+      // Remove listeners after unlock
+      document.removeEventListener('touchstart', unlock);
+      document.removeEventListener('touchend', unlock);
+      document.removeEventListener('click', unlock);
+      document.removeEventListener('keydown', unlock);
+    };
+
+    // Listen for any user interaction
+    document.addEventListener('touchstart', unlock, { once: true });
+    document.addEventListener('touchend', unlock, { once: true });
+    document.addEventListener('click', unlock, { once: true });
+    document.addEventListener('keydown', unlock, { once: true });
   }
 
   // Resume audio context (required after user interaction)
