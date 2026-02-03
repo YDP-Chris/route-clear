@@ -76,6 +76,14 @@ export class HUD extends Phaser.GameObjects.Container {
     });
     this.add(this.neutralizedText);
 
+    // Blue Falcon counter (shame indicator)
+    this.bfText = scene.add.text(width - 20, hudHeight + 10, '', {
+      fontFamily: 'Arial',
+      fontSize: '14px',
+      color: '#6699FF'
+    }).setOrigin(1, 0);
+    this.add(this.bfText);
+
     // Add to scene
     scene.add.existing(this);
 
@@ -106,6 +114,11 @@ export class HUD extends Phaser.GameObjects.Container {
 
     // Update neutralized count
     this.neutralizedText.setText(`CLEARED: ${state.neutralized}`);
+
+    // Update Blue Falcon counter
+    if (state.blueFalcons > 0) {
+      this.bfText.setText(`🦅 ${state.blueFalcons}/3`);
+    }
 
     // Update threat meter
     this.threatMeter.update(

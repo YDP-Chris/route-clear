@@ -60,6 +60,12 @@ export class AudioManager {
     console.log('[Audio] Scan miss');
   }
 
+  playBlueFalcon() {
+    if (!this.enabled) return;
+    // this.sounds.blueFalcon?.play();
+    console.log('[Audio] Blue Falcon - shame!');
+  }
+
   playCritical() {
     if (!this.enabled) return;
     // this.sounds.critical?.play({ loop: true });

@@ -23,7 +23,8 @@ export class GameScene extends Phaser.Scene {
       speed: SPEEDS.CRUISE,
       casualties: 0,
       neutralized: 0,
-      streak: 0
+      streak: 0,
+      blueFalcons: 0
     };
   }
 
@@ -200,6 +201,10 @@ export class GameScene extends Phaser.Scene {
 
       // Remove if off screen
       if (ied.y > this.cameras.main.height + 100) {
+        // IED passed without being neutralized - BLUE FALCON
+        if (ied.isActive()) {
+          this.onBlueFalcon(ied);
+        }
         ied.destroy();
         this.activeIEDs.splice(i, 1);
       }
@@ -321,6 +326,97 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  onBlueFalcon(ied) {
+    this.gameState.blueFalcons++;
+    this.gameState.streak = 0;
+
+    // Show BLUE FALCON feedback
+    this.hud.showMessage('BLUE FALCON', 0x0066FF);
+    this.audioManager.playBlueFalcon();
+
+    // Show the blue falcon graphic
+    this.showBlueFalconGraphic();
+
+    // Screen flash blue
+    this.cameras.main.flash(300, 0, 50, 200);
+
+    // Check game over - convoy abandons you after 3
+    if (this.gameState.blueFalcons >= 3) {
+      this.gameOverBlueFalcon();
+    }
+  }
+
+  showBlueFalconGraphic() {
+    const width = this.cameras.main.width;
+    const height = this.cameras.main.height;
+
+    // Create blue falcon text (will be replaced with image asset later)
+    const falconText = this.add.text(width / 2, height / 2, '🦅', {
+      fontSize: '80px'
+    });
+    falconText.setOrigin(0.5);
+    falconText.setTint(0x0066FF);
+
+    // "BUDDY FUCKER" subtitle
+    const subtitle = this.add.text(width / 2, height / 2 + 60, 'You left it for the convoy!', {
+      fontSize: '16px',
+      fontFamily: 'Arial',
+      color: '#6699FF',
+      stroke: '#000000',
+      strokeThickness: 3
+    });
+    subtitle.setOrigin(0.5);
+
+    // BF counter
+    const counter = this.add.text(width / 2, height / 2 + 85, `${this.gameState.blueFalcons}/3`, {
+      fontSize: '14px',
+      fontFamily: 'Arial',
+      color: '#FF6666',
+      stroke: '#000000',
+      strokeThickness: 2
+    });
+    counter.setOrigin(0.5);
+
+    // Animate out
+    this.tweens.add({
+      targets: [falconText, subtitle, counter],
+      y: '-=50',
+      alpha: 0,
+      duration: 1500,
+      ease: 'Power2',
+      onComplete: () => {
+        falconText.destroy();
+        subtitle.destroy();
+        counter.destroy();
+      }
+    });
+  }
+
+  gameOverBlueFalcon() {
+    this.gameState.isPlaying = false;
+
+    // Stop spawning
+    if (this.spawnTimer) {
+      this.spawnTimer.remove();
+    }
+
+    // Show message
+    this.hud.showMessage('CONVOY ABANDONED YOU', 0x0066FF);
+
+    // Fade out
+    this.cameras.main.fadeOut(1500, 0, 0, 100);
+
+    this.time.delayedCall(1500, () => {
+      this.scene.start('GameOverScene', {
+        distance: Math.round(this.gameState.distance),
+        neutralized: this.gameState.neutralized,
+        score: this.scoreManager.getScore(),
+        blueFalcons: this.gameState.blueFalcons,
+        reason: 'blueFalcon'
+      });
+    });
+  }
+
   createExplosion(x, y) {
     const explosion = this.add.image(x, y, 'explosion');
     explosion.setScale(0.5);
@@ -367,7 +463,9 @@ export class GameScene extends Phaser.Scene {
       this.scene.start('GameOverScene', {
         distance: Math.round(this.gameState.distance),
         neutralized: this.gameState.neutralized,
-        score: this.scoreManager.getScore()
+        score: this.scoreManager.getScore(),
+        blueFalcons: this.gameState.blueFalcons,
+        reason: 'detonation'
       });
     });
   }
