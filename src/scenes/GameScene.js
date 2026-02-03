@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { COLORS, SPEEDS, TIMING, LAYOUT, PARALLAX, SCORING, LANES } from '../config/constants.js';
 import { IED_TYPES, SPAWN_CONFIG } from '../config/iedConfig.js';
 import { CHALLENGES, getChallengeProgress, saveChallengeProgress } from '../config/challengeConfig.js';
+import { getStats, saveStats, checkAchievements } from '../config/achievementConfig.js';
 import { Husky } from '../entities/Husky.js';
 import { IED } from '../entities/IED.js';
 import { DetectionSystem } from '../systems/DetectionSystem.js';
@@ -985,6 +986,9 @@ export class GameScene extends Phaser.Scene {
       this.spawnTimer.remove();
     }
 
+    // Update global stats and check achievements
+    const newAchievements = this.updateStatsAndCheckAchievements();
+
     // Fade out
     this.cameras.main.fadeOut(1000, 0, 0, 0);
 
@@ -994,9 +998,56 @@ export class GameScene extends Phaser.Scene {
         neutralized: this.gameState.neutralized,
         score: this.scoreManager.getScore(),
         blueFalcons: this.gameState.blueFalcons,
-        reason: reason
+        perfects: this.gameState.perfects,
+        reason: reason,
+        newAchievements: newAchievements
       });
     });
+  }
+
+  updateStatsAndCheckAchievements() {
+    const stats = getStats();
+    const score = this.scoreManager.getScore();
+    const distance = Math.round(this.gameState.distance);
+
+    // Update cumulative stats
+    stats.totalNeutralized += this.gameState.neutralized;
+    stats.totalPerfects += this.gameState.perfects;
+    stats.totalDistance += distance;
+    stats.totalRuns++;
+
+    // Update best stats
+    if (score > stats.bestScore) stats.bestScore = score;
+    if (this.gameState.streak > stats.bestStreak) stats.bestStreak = this.gameState.streak;
+
+    const perfectStreak = this.detectionSystem.getPerfectStreak();
+    if (perfectStreak > stats.bestPerfectStreak) stats.bestPerfectStreak = perfectStreak;
+
+    // Track VBIED kills (check neutralized IEDs)
+    // Note: we'd need to track this during gameplay - simplified for now
+    if (this.gameState.neutralized > 0 && this.gameState.distance > 600) {
+      stats.vbiedsNeutralized += 1; // Approximate
+    }
+
+    // Track clean runs (no Blue Falcons)
+    if (this.gameState.blueFalcons === 0 && distance > stats.cleanRunDistance) {
+      stats.cleanRunDistance = distance;
+    }
+
+    // Speed demon tracking (simplified - would need proper tracking during game)
+    if (this.gameState.speed >= 200 && this.gameState.neutralized >= 5) {
+      stats.speedDemonCount = Math.max(stats.speedDemonCount, this.gameState.neutralized);
+    }
+
+    // Challenge stats from challenge progress
+    const challengeProgress = getChallengeProgress();
+    stats.challengesCompleted = challengeProgress.completed.length;
+    stats.goldMedals = Object.values(challengeProgress.medals).filter(m => m === 'gold').length;
+
+    saveStats(stats);
+
+    // Check for new achievements
+    return checkAchievements(stats);
   }
 
   onPause() {

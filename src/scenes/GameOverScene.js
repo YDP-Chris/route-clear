@@ -19,7 +19,9 @@ export class GameOverScene extends Phaser.Scene {
       mode: data.mode || 'endless',
       challengeId: data.challengeId,
       success: data.success,
-      medal: data.medal
+      medal: data.medal,
+      // Achievements
+      newAchievements: data.newAchievements || []
     };
   }
 
@@ -181,6 +183,11 @@ export class GameOverScene extends Phaser.Scene {
 
     // High Scores list
     this.showHighScores(width, statsY + lineHeight * (dividerRow + 0.5));
+
+    // Show new achievements (if any)
+    if (this.finalData.newAchievements && this.finalData.newAchievements.length > 0) {
+      this.showNewAchievements(this.finalData.newAchievements);
+    }
 
     // Message - different based on reason
     let message = 'Every route clearer saves lives.\nTheir vigilance protects all who follow.';
@@ -360,6 +367,82 @@ export class GameOverScene extends Phaser.Scene {
     this.cameras.main.fadeOut(300);
     this.time.delayedCall(300, () => {
       this.scene.start('GameScene', { mode: 'challenge', challengeId: this.finalData.challengeId });
+    });
+  }
+
+  showNewAchievements(achievements) {
+    const width = this.cameras.main.width;
+    const height = this.cameras.main.height;
+
+    // Show achievements one by one with animation
+    achievements.forEach((achievement, index) => {
+      this.time.delayedCall(500 + index * 1500, () => {
+        this.showAchievementPopup(achievement);
+      });
+    });
+  }
+
+  showAchievementPopup(achievement) {
+    const width = this.cameras.main.width;
+
+    // Background
+    const bg = this.add.rectangle(width / 2, 120, width * 0.85, 70, 0x2a2a2a, 0.95);
+    bg.setStrokeStyle(2, 0xFFD700);
+    bg.setDepth(300);
+    bg.setAlpha(0);
+
+    // Icon
+    const icon = this.add.text(width / 2 - 100, 120, achievement.icon, {
+      fontSize: '36px'
+    }).setOrigin(0.5).setDepth(301).setAlpha(0);
+
+    // Title
+    const title = this.add.text(width / 2 + 10, 108, 'ACHIEVEMENT UNLOCKED!', {
+      fontFamily: 'Arial',
+      fontSize: '12px',
+      color: '#FFD700'
+    }).setOrigin(0.5, 0.5).setDepth(301).setAlpha(0);
+
+    // Name
+    const name = this.add.text(width / 2 + 10, 130, achievement.name, {
+      fontFamily: 'Arial',
+      fontSize: '18px',
+      fontStyle: 'bold',
+      color: '#FFFFFF'
+    }).setOrigin(0.5, 0.5).setDepth(301).setAlpha(0);
+
+    // Animate in
+    this.tweens.add({
+      targets: [bg, icon, title, name],
+      alpha: 1,
+      duration: 300,
+      ease: 'Power2'
+    });
+
+    // Scale pop
+    this.tweens.add({
+      targets: bg,
+      scaleX: 1.05,
+      scaleY: 1.1,
+      duration: 150,
+      yoyo: true,
+      ease: 'Power2'
+    });
+
+    // Fade out after delay
+    this.time.delayedCall(2500, () => {
+      this.tweens.add({
+        targets: [bg, icon, title, name],
+        alpha: 0,
+        y: '-=30',
+        duration: 400,
+        onComplete: () => {
+          bg.destroy();
+          icon.destroy();
+          title.destroy();
+          name.destroy();
+        }
+      });
     });
   }
 
