@@ -146,13 +146,12 @@ export const SPAWN_CONFIG = {
   // Difficulty progression - unlock new types as distance increases
   difficultyLevels: [
     { distance: 0,    spawnRate: 0.3, types: ['cwied'], hint: true },
-    { distance: 500,  spawnRate: 0.35, types: ['cwied'] },
-    { distance: 1000, spawnRate: 0.4, types: ['cwied', 'ppied'], hint: true },
-    { distance: 2000, spawnRate: 0.45, types: ['cwied', 'ppied'] },
-    { distance: 2500, spawnRate: 0.5, types: ['cwied', 'ppied', 'rcied'], hint: true },
-    { distance: 4000, spawnRate: 0.55, types: ['cwied', 'ppied', 'rcied'] },
-    { distance: 5000, spawnRate: 0.6, types: ['cwied', 'ppied', 'rcied', 'vbied'], hint: true },
-    { distance: 7500, spawnRate: 0.7, types: ['cwied', 'ppied', 'rcied', 'vbied'] }
+    { distance: 150,  spawnRate: 0.4, types: ['cwied', 'ppied'], hint: true },
+    { distance: 350,  spawnRate: 0.45, types: ['cwied', 'ppied', 'rcied'], hint: true },
+    { distance: 600,  spawnRate: 0.5, types: ['cwied', 'ppied', 'rcied', 'vbied'], hint: true },
+    { distance: 1000, spawnRate: 0.55, types: ['cwied', 'ppied', 'rcied', 'vbied'] },
+    { distance: 2000, spawnRate: 0.6, types: ['cwied', 'ppied', 'rcied', 'vbied'] },
+    { distance: 3500, spawnRate: 0.7, types: ['cwied', 'ppied', 'rcied', 'vbied'] }
   ],
 
   // Type weights (probability when multiple types available)
