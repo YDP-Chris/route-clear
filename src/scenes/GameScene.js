@@ -531,6 +531,9 @@ export class GameScene extends Phaser.Scene {
     const didScan = this.husky.scan();
     if (!didScan) return; // On cooldown
 
+    // Play sonar ping sound
+    this.audioManager.playScan();
+
     const result = this.detectionSystem.performScan();
 
     if (result.success) {
@@ -564,6 +567,8 @@ export class GameScene extends Phaser.Scene {
         fontSize = '28px';
         // Screen flash gold
         this.cameras.main.flash(150, 255, 215, 0, false, null, this);
+        // Sparkle sound for perfect timing
+        this.audioManager.playPerfect();
         break;
       case 'good':
         text = 'GOOD!';
