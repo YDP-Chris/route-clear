@@ -156,10 +156,10 @@ export const SPAWN_CONFIG = {
 
   // Type weights (probability when multiple types available)
   typeWeights: {
-    cwied: 1.0,   // Common
-    ppied: 0.6,   // Less common
-    rcied: 0.5,   // Moderately rare
-    vbied: 0.3    // Rare but deadly
+    cwied: 0.5,   // Less common once others unlock
+    ppied: 1.0,   // Common when available
+    rcied: 1.0,   // Common when available
+    vbied: 0.7    // Slightly less common but still frequent
   },
 
   // Randomization

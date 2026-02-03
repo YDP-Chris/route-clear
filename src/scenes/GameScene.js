@@ -173,8 +173,15 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // Choose IED type based on available types and weights
-    const type = this.chooseIEDType(diffLevel.types);
+    // Choose IED type - force new types to appear when first unlocked
+    let type;
+    const newTypes = diffLevel.types.filter(t => !this.seenTypes.has(t));
+    if (newTypes.length > 0) {
+      // Force spawn a type the player hasn't seen yet
+      type = newTypes[Math.floor(Math.random() * newTypes.length)];
+    } else {
+      type = this.chooseIEDType(diffLevel.types);
+    }
 
     // Choose a random lane
     const lane = Phaser.Math.Between(0, LANES.COUNT - 1);
