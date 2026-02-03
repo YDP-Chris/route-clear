@@ -182,7 +182,7 @@ export class GameOverScene extends Phaser.Scene {
     line.lineBetween(width * 0.2, statsY + lineHeight * dividerRow, width * 0.8, statsY + lineHeight * dividerRow);
 
     // High Scores list
-    this.showHighScores(width, statsY + lineHeight * (dividerRow + 0.5));
+    this.showHighScores(width / 2, statsY + lineHeight * (dividerRow + 0.5));
 
     // Show new achievements (if any)
     if (this.finalData.newAchievements && this.finalData.newAchievements.length > 0) {
