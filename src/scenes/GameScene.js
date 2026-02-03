@@ -309,7 +309,12 @@ export class GameScene extends Phaser.Scene {
     const result = this.detectionSystem.performScan();
 
     if (result.success) {
-      // Show success feedback
+      // Show timing feedback for best rated scan
+      if (result.bestRating) {
+        this.showTimingFeedback(result.bestRating, result.perfectStreak);
+      }
+
+      // Show multi-kill feedback
       if (result.count > 1) {
         this.hud.showMessage(`${result.count}x IEDs NEUTRALIZED!`, COLORS.THREAT_SAFE);
       }
@@ -320,6 +325,77 @@ export class GameScene extends Phaser.Scene {
     } else {
       // Show miss feedback
       this.showScanMiss();
+    }
+  }
+
+  showTimingFeedback(ratingInfo, perfectStreak) {
+    const { rating, multiplier } = ratingInfo;
+
+    let text, color, fontSize;
+    switch (rating) {
+      case 'perfect':
+        text = perfectStreak > 1 ? `PERFECT x${perfectStreak}!` : 'PERFECT!';
+        color = '#FFD700';
+        fontSize = '28px';
+        // Screen flash gold
+        this.cameras.main.flash(150, 255, 215, 0, false, null, this);
+        break;
+      case 'good':
+        text = 'GOOD!';
+        color = '#00FF88';
+        fontSize = '22px';
+        break;
+      case 'early':
+        text = 'EARLY';
+        color = '#88AAFF';
+        fontSize = '18px';
+        break;
+      case 'late':
+        text = 'CLOSE!';
+        color = '#FFAA44';
+        fontSize = '18px';
+        break;
+      default:
+        return;
+    }
+
+    const feedbackText = this.add.text(this.husky.x, this.husky.y - 100, text, {
+      fontSize: fontSize,
+      fontFamily: 'Arial Black',
+      color: color,
+      stroke: '#000000',
+      strokeThickness: 4
+    });
+    feedbackText.setOrigin(0.5);
+    feedbackText.setDepth(60);
+
+    // Animate based on rating
+    if (rating === 'perfect') {
+      this.tweens.add({
+        targets: feedbackText,
+        scale: 1.3,
+        y: feedbackText.y - 30,
+        duration: 200,
+        ease: 'Back.easeOut',
+        onComplete: () => {
+          this.tweens.add({
+            targets: feedbackText,
+            y: feedbackText.y - 30,
+            alpha: 0,
+            duration: 600,
+            onComplete: () => feedbackText.destroy()
+          });
+        }
+      });
+    } else {
+      this.tweens.add({
+        targets: feedbackText,
+        y: feedbackText.y - 50,
+        alpha: 0,
+        duration: 700,
+        ease: 'Power2',
+        onComplete: () => feedbackText.destroy()
+      });
     }
   }
 
@@ -386,19 +462,29 @@ export class GameScene extends Phaser.Scene {
     this.gameState.neutralized++;
     this.gameState.streak++;
 
-    // Calculate score
+    // Get timing multiplier from last scan
+    const timingMultiplier = this.getTimingMultiplier();
+    const perfectStreak = this.detectionSystem.getPerfectStreak();
+
+    // Calculate score with timing bonus
+    const basePoints = ied.config?.basePoints || SCORING.IED_NEUTRALIZED;
     const speedBonus = (this.gameState.speed / SPEEDS.MAX) * SCORING.SPEED_BONUS_MULTIPLIER;
     const streakBonus = (this.gameState.streak - 1) * SCORING.STREAK_MULTIPLIER;
-    const points = Math.round(SCORING.IED_NEUTRALIZED * (1 + speedBonus + streakBonus));
+    const perfectStreakBonus = perfectStreak > 1 ? (perfectStreak - 1) * 0.1 : 0;
+
+    const points = Math.round(basePoints * timingMultiplier * (1 + speedBonus + streakBonus + perfectStreakBonus));
 
     this.scoreManager.addPoints(points);
 
-    // Show feedback
-    this.hud.showMessage('IED NEUTRALIZED', COLORS.THREAT_SAFE);
+    // Show feedback (only if not already shown by multi-kill)
+    if (this.activeIEDs.filter(i => !i.isActive()).length <= 1) {
+      this.hud.showMessage('IED NEUTRALIZED', COLORS.THREAT_SAFE);
+    }
     this.audioManager.playNeutralized();
 
-    // Show floating score
-    this.showFloatingScore(ied.x, ied.y, points);
+    // Show floating score (with perfect indicator)
+    const isPerfect = this.detectionSystem.lastScanRating === 'perfect';
+    this.showFloatingScore(ied.x, ied.y, points, isPerfect);
 
     // Remove from active
     const index = this.activeIEDs.indexOf(ied);
@@ -407,24 +493,54 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  showFloatingScore(x, y, points) {
+  getTimingMultiplier() {
+    const rating = this.detectionSystem.lastScanRating;
+    switch (rating) {
+      case 'perfect': return 2.0;
+      case 'good': return 1.5;
+      default: return 1.0;
+    }
+  }
+
+  showFloatingScore(x, y, points, isPerfect = false) {
     const scoreText = this.add.text(x, y, `+${points}`, {
-      fontSize: '18px',
+      fontSize: isPerfect ? '24px' : '18px',
       fontFamily: 'Arial Black',
-      color: '#00FF00',
+      color: isPerfect ? '#FFD700' : '#00FF00',
       stroke: '#000000',
-      strokeThickness: 3
+      strokeThickness: isPerfect ? 4 : 3
     });
     scoreText.setOrigin(0.5);
+    scoreText.setDepth(55);
 
-    this.tweens.add({
-      targets: scoreText,
-      y: y - 50,
-      alpha: 0,
-      duration: 800,
-      ease: 'Power2',
-      onComplete: () => scoreText.destroy()
-    });
+    if (isPerfect) {
+      // Perfect score has more dramatic animation
+      this.tweens.add({
+        targets: scoreText,
+        scale: 1.3,
+        duration: 150,
+        yoyo: true,
+        onComplete: () => {
+          this.tweens.add({
+            targets: scoreText,
+            y: y - 70,
+            alpha: 0,
+            duration: 900,
+            ease: 'Power2',
+            onComplete: () => scoreText.destroy()
+          });
+        }
+      });
+    } else {
+      this.tweens.add({
+        targets: scoreText,
+        y: y - 50,
+        alpha: 0,
+        duration: 800,
+        ease: 'Power2',
+        onComplete: () => scoreText.destroy()
+      });
+    }
   }
 
   onIEDDetonated(ied) {
