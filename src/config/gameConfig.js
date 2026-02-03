@@ -3,6 +3,7 @@ import { BootScene } from '../scenes/BootScene.js';
 import { MenuScene } from '../scenes/MenuScene.js';
 import { GameScene } from '../scenes/GameScene.js';
 import { GameOverScene } from '../scenes/GameOverScene.js';
+import { ChallengeSelectScene } from '../scenes/ChallengeSelectScene.js';
 
 export const gameConfig = {
   type: Phaser.AUTO,
@@ -36,7 +37,7 @@ export const gameConfig = {
     activePointers: 3
   },
 
-  scene: [BootScene, MenuScene, GameScene, GameOverScene],
+  scene: [BootScene, MenuScene, ChallengeSelectScene, GameScene, GameOverScene],
 
   render: {
     pixelArt: false,

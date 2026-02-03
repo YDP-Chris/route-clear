@@ -52,29 +52,47 @@ export class MenuScene extends Phaser.Scene {
       }).setOrigin(0.5);
     }
 
-    // Tap to start (pulsing)
-    const startText = this.add.text(width / 2, height * 0.72, 'TAP TO START', {
+    // Endless Mode button
+    const endlessBtn = this.add.text(width / 2, height * 0.70, 'ENDLESS MODE', {
       fontFamily: 'Arial',
-      fontSize: '36px',
+      fontSize: '28px',
       fontStyle: 'bold',
       color: '#FFFFFF',
       stroke: '#000000',
       strokeThickness: 4
     }).setOrigin(0.5);
+    endlessBtn.setInteractive({ useHandCursor: true });
+    endlessBtn.on('pointerover', () => endlessBtn.setColor('#00FF00'));
+    endlessBtn.on('pointerout', () => endlessBtn.setColor('#FFFFFF'));
+    endlessBtn.on('pointerdown', () => this.startGame());
 
     // Pulse animation
     this.tweens.add({
-      targets: startText,
-      alpha: 0.3,
+      targets: endlessBtn,
+      alpha: 0.6,
       duration: 800,
       yoyo: true,
       repeat: -1
     });
 
-    // Controls hint
-    this.add.text(width / 2, height * 0.82, 'LEFT: Brake | CENTER: Scan | RIGHT: Accelerate', {
+    // Challenges button
+    const challengeBtn = this.add.text(width / 2, height * 0.78, 'CHALLENGES', {
       fontFamily: 'Arial',
-      fontSize: '18px',
+      fontSize: '24px',
+      fontStyle: 'bold',
+      color: '#FFD700',
+      stroke: '#000000',
+      strokeThickness: 3
+    }).setOrigin(0.5);
+    challengeBtn.setInteractive({ useHandCursor: true });
+    challengeBtn.on('pointerover', () => challengeBtn.setColor('#FFFF00'));
+    challengeBtn.on('pointerout', () => challengeBtn.setColor('#FFD700'));
+    challengeBtn.on('pointerdown', () => this.startChallenges());
+
+    // Controls hint
+    this.add.text(width / 2, height * 0.86, 'LEFT: Brake | CENTER: Scan | RIGHT: Accelerate', {
+      fontFamily: 'Arial',
+      fontSize: '16px',
       color: '#FFFFFF',
       stroke: '#000000',
       strokeThickness: 2
@@ -88,11 +106,6 @@ export class MenuScene extends Phaser.Scene {
       color: '#FFD700'
     }).setOrigin(0.5);
 
-    // Start game on tap/click
-    this.input.once('pointerdown', () => {
-      this.startGame();
-    });
-
     // Keyboard support
     this.input.keyboard.once('keydown-SPACE', () => {
       this.startGame();
@@ -101,12 +114,23 @@ export class MenuScene extends Phaser.Scene {
     this.input.keyboard.once('keydown-ENTER', () => {
       this.startGame();
     });
+
+    this.input.keyboard.once('keydown-C', () => {
+      this.startChallenges();
+    });
   }
 
   startGame() {
     this.cameras.main.fadeOut(500, 0, 0, 0);
     this.time.delayedCall(500, () => {
-      this.scene.start('GameScene');
+      this.scene.start('GameScene', { mode: 'endless' });
+    });
+  }
+
+  startChallenges() {
+    this.cameras.main.fadeOut(300, 0, 0, 0);
+    this.time.delayedCall(300, () => {
+      this.scene.start('ChallengeSelectScene');
     });
   }
 }

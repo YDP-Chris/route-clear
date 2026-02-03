@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS, SPEEDS, TIMING, LAYOUT, PARALLAX, SCORING, LANES } from '../config/constants.js';
 import { IED_TYPES, SPAWN_CONFIG } from '../config/iedConfig.js';
+import { CHALLENGES, getChallengeProgress, saveChallengeProgress } from '../config/challengeConfig.js';
 import { Husky } from '../entities/Husky.js';
 import { IED } from '../entities/IED.js';
 import { DetectionSystem } from '../systems/DetectionSystem.js';
@@ -16,21 +17,32 @@ export class GameScene extends Phaser.Scene {
     super({ key: 'GameScene' });
   }
 
-  init() {
+  init(data) {
+    // Game mode: 'endless' or 'challenge'
+    this.gameMode = data?.mode || 'endless';
+    this.challengeId = data?.challengeId || null;
+    this.challenge = this.challengeId ? CHALLENGES[this.challengeId] : null;
+
     this.gameState = {
       isPlaying: true,
       isPaused: false,
       distance: 0,
-      speed: SPEEDS.CRUISE,
+      speed: this.challenge?.startSpeed || SPEEDS.CRUISE,
       casualties: 0,
       neutralized: 0,
       streak: 0,
-      blueFalcons: 0
+      blueFalcons: 0,
+      perfects: 0
     };
 
     // Track which IED types player has seen (for tutorial hints)
     this.seenTypes = new Set();
     this.currentDifficultyLevel = 0;
+
+    // Challenge mode tracking
+    this.challengePatternIndex = 0;
+    this.challengeSpawnedIEDs = [];
+    this.challengeComplete = false;
   }
 
   create() {
@@ -69,20 +81,29 @@ export class GameScene extends Phaser.Scene {
     // Setup input
     this.inputHandler.setup();
 
-    // IED spawning timer
-    this.spawnTimer = this.time.addEvent({
-      delay: TIMING.IED_SPAWN_MIN + Math.random() * (TIMING.IED_SPAWN_MAX - TIMING.IED_SPAWN_MIN),
-      callback: this.spawnIED,
-      callbackScope: this,
-      loop: true
-    });
+    // IED spawning depends on mode
+    if (this.gameMode === 'challenge') {
+      // Challenge mode: spawn based on distance pattern
+      this.spawnTimer = null; // No timer-based spawning
 
-    // Initial IED after delay
-    this.time.delayedCall(2000, () => {
-      if (this.gameState.isPlaying) {
-        this.spawnIED();
-      }
-    });
+      // Show challenge info
+      this.showChallengeStart();
+    } else {
+      // Endless mode: timer-based spawning
+      this.spawnTimer = this.time.addEvent({
+        delay: TIMING.IED_SPAWN_MIN + Math.random() * (TIMING.IED_SPAWN_MAX - TIMING.IED_SPAWN_MIN),
+        callback: this.spawnIED,
+        callbackScope: this,
+        loop: true
+      });
+
+      // Initial IED after delay
+      this.time.delayedCall(2000, () => {
+        if (this.gameState.isPlaying) {
+          this.spawnIED();
+        }
+      });
+    }
 
     // Pause handling
     this.events.on('pause', this.onPause, this);
@@ -122,6 +143,12 @@ export class GameScene extends Phaser.Scene {
     // Update husky
     this.husky.update(time, delta);
 
+    // Challenge mode: spawn IEDs based on distance pattern
+    if (this.gameMode === 'challenge') {
+      this.updateChallengeSpawns();
+      this.checkChallengeObjectives();
+    }
+
     // Update IEDs
     this.updateIEDs(time, delta);
 
@@ -136,6 +163,197 @@ export class GameScene extends Phaser.Scene {
 
     // Update score from distance
     this.scoreManager.addDistancePoints(this.gameState.speed * deltaSeconds);
+
+    // Challenge mode: check speed requirement
+    if (this.challenge?.objectives?.minSpeed && this.gameState.speed < this.challenge.objectives.minSpeed) {
+      this.onSpeedViolation();
+    }
+  }
+
+  showChallengeStart() {
+    if (!this.challenge) return;
+
+    const width = this.cameras.main.width;
+    const height = this.cameras.main.height;
+
+    // Challenge name
+    const title = this.add.text(width / 2, height * 0.35, this.challenge.name, {
+      fontSize: '36px',
+      fontFamily: 'Arial Black',
+      color: '#FFD700',
+      stroke: '#000000',
+      strokeThickness: 4
+    }).setOrigin(0.5).setDepth(200);
+
+    // Challenge objective
+    const obj = this.challenge.objectives;
+    let objText = `Clear ${obj.neutralize} IEDs`;
+    if (obj.minSpeed) objText += ` | Keep ${obj.minSpeed}+ speed`;
+    if (obj.minPerfects) objText += ` | ${obj.minPerfects} PERFECTs required`;
+
+    const desc = this.add.text(width / 2, height * 0.42, objText, {
+      fontSize: '18px',
+      fontFamily: 'Arial',
+      color: '#FFFFFF',
+      stroke: '#000000',
+      strokeThickness: 2
+    }).setOrigin(0.5).setDepth(200);
+
+    // Fade out
+    this.time.delayedCall(2000, () => {
+      this.tweens.add({
+        targets: [title, desc],
+        alpha: 0,
+        duration: 500,
+        onComplete: () => {
+          title.destroy();
+          desc.destroy();
+        }
+      });
+    });
+  }
+
+  updateChallengeSpawns() {
+    if (!this.challenge || this.challengeComplete) return;
+
+    const pattern = this.challenge.pattern;
+    const distance = this.gameState.distance;
+    const width = this.cameras.main.width;
+
+    // Spawn IEDs when we reach their trigger distance
+    while (this.challengePatternIndex < pattern.length) {
+      const spawn = pattern[this.challengePatternIndex];
+      if (distance >= spawn.distance) {
+        // Spawn this IED
+        const x = width * LANES.POSITIONS[spawn.lane];
+        const ied = new IED(this, x, -50, spawn.type);
+        ied.lane = spawn.lane;
+        this.activeIEDs.push(ied);
+        this.challengeSpawnedIEDs.push(ied);
+        this.challengePatternIndex++;
+
+        // Show type hint for new types
+        if (!this.seenTypes.has(spawn.type)) {
+          this.seenTypes.add(spawn.type);
+          this.showTypeHint(spawn.type);
+        }
+      } else {
+        break;
+      }
+    }
+  }
+
+  checkChallengeObjectives() {
+    if (!this.challenge || this.challengeComplete) return;
+
+    const obj = this.challenge.objectives;
+    const state = this.gameState;
+
+    // Check failure conditions
+    if (obj.maxCasualties !== undefined && state.casualties > obj.maxCasualties) {
+      this.challengeFailed('Too many casualties');
+      return;
+    }
+    if (obj.maxBlueFalcons !== undefined && state.blueFalcons > obj.maxBlueFalcons) {
+      this.challengeFailed('Too many Blue Falcons');
+      return;
+    }
+
+    // Check victory conditions
+    if (state.neutralized >= obj.neutralize) {
+      // Check additional requirements
+      if (obj.minPerfects && state.perfects < obj.minPerfects) {
+        this.challengeFailed(`Need ${obj.minPerfects} PERFECTs, got ${state.perfects}`);
+        return;
+      }
+      this.challengeComplete = true;
+      this.challengeSuccess();
+    }
+  }
+
+  challengeSuccess() {
+    this.gameState.isPlaying = false;
+
+    // Calculate medal
+    const score = this.scoreManager.getScore();
+    const perfects = this.gameState.perfects;
+    const medals = this.challenge.medals;
+
+    let medal = null;
+    if (score >= medals.gold.score && perfects >= medals.gold.perfects) medal = 'gold';
+    else if (score >= medals.silver.score && perfects >= medals.silver.perfects) medal = 'silver';
+    else if (score >= medals.bronze.score && perfects >= medals.bronze.perfects) medal = 'bronze';
+
+    // Save progress
+    const progress = getChallengeProgress();
+    if (!progress.completed.includes(this.challengeId)) {
+      progress.completed.push(this.challengeId);
+    }
+    if (!progress.medals[this.challengeId] || this.medalRank(medal) > this.medalRank(progress.medals[this.challengeId])) {
+      progress.medals[this.challengeId] = medal;
+    }
+    if (!progress.bestScores[this.challengeId] || score > progress.bestScores[this.challengeId]) {
+      progress.bestScores[this.challengeId] = score;
+    }
+    saveChallengeProgress(progress);
+
+    // Show success
+    this.hud.showMessage('CHALLENGE COMPLETE!', 0x00FF00);
+
+    this.cameras.main.fadeOut(1500, 0, 50, 0);
+    this.time.delayedCall(1500, () => {
+      this.scene.start('GameOverScene', {
+        mode: 'challenge',
+        challengeId: this.challengeId,
+        success: true,
+        medal: medal,
+        distance: Math.round(this.gameState.distance),
+        neutralized: this.gameState.neutralized,
+        perfects: this.gameState.perfects,
+        score: score
+      });
+    });
+  }
+
+  challengeFailed(reason) {
+    this.gameState.isPlaying = false;
+    this.challengeComplete = true;
+
+    this.hud.showMessage(reason || 'CHALLENGE FAILED', COLORS.THREAT_CRITICAL);
+    this.cameras.main.fadeOut(1000, 50, 0, 0);
+
+    this.time.delayedCall(1000, () => {
+      this.scene.start('GameOverScene', {
+        mode: 'challenge',
+        challengeId: this.challengeId,
+        success: false,
+        reason: reason,
+        distance: Math.round(this.gameState.distance),
+        neutralized: this.gameState.neutralized,
+        perfects: this.gameState.perfects,
+        score: this.scoreManager.getScore()
+      });
+    });
+  }
+
+  medalRank(medal) {
+    return { gold: 3, silver: 2, bronze: 1, null: 0 }[medal] || 0;
+  }
+
+  onSpeedViolation() {
+    // Called when player drops below minimum speed in speed challenge
+    // Give a warning first, then fail
+    if (!this.speedWarningShown) {
+      this.speedWarningShown = true;
+      this.hud.showMessage('SPEED UP!', 0xFF6600);
+
+      this.time.delayedCall(2000, () => {
+        if (this.gameState.speed < this.challenge.objectives.minSpeed && this.gameState.isPlaying) {
+          this.challengeFailed('Speed dropped too low');
+        }
+        this.speedWarningShown = false;
+      });
+    }
   }
 
   updateSpeed(deltaSeconds) {
@@ -484,6 +702,9 @@ export class GameScene extends Phaser.Scene {
 
     // Show floating score (with perfect indicator)
     const isPerfect = this.detectionSystem.lastScanRating === 'perfect';
+    if (isPerfect) {
+      this.gameState.perfects++;
+    }
     this.showFloatingScore(ied.x, ied.y, points, isPerfect);
 
     // Remove from active

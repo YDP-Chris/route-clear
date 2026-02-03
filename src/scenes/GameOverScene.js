@@ -13,7 +13,13 @@ export class GameOverScene extends Phaser.Scene {
       neutralized: data.neutralized || 0,
       score: data.score || 0,
       blueFalcons: data.blueFalcons || 0,
-      reason: data.reason || 'detonation'
+      perfects: data.perfects || 0,
+      reason: data.reason || 'detonation',
+      // Challenge mode data
+      mode: data.mode || 'endless',
+      challengeId: data.challengeId,
+      success: data.success,
+      medal: data.medal
     };
   }
 
@@ -27,6 +33,13 @@ export class GameOverScene extends Phaser.Scene {
     // Dark background
     this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a1a);
 
+    // Handle challenge vs endless mode differently
+    if (this.finalData.mode === 'challenge') {
+      this.createChallengeResults(width, height);
+      return;
+    }
+
+    // ENDLESS MODE RESULTS
     // Title - different based on death reason
     const isBlueFalcon = this.finalData.reason === 'blueFalcon';
     const isVBIED = this.finalData.reason === 'vbied';
@@ -228,6 +241,132 @@ export class GameOverScene extends Phaser.Scene {
 
     this.input.keyboard.once('keydown-M', () => {
       this.goToMenu();
+    });
+  }
+
+  createChallengeResults(width, height) {
+    const success = this.finalData.success;
+    const medal = this.finalData.medal;
+
+    // Title
+    const title = success ? 'CHALLENGE COMPLETE!' : 'CHALLENGE FAILED';
+    const titleColor = success ? '#00FF00' : '#FF4444';
+
+    this.add.text(width / 2, height * 0.12, title, {
+      fontFamily: 'Arial Black',
+      fontSize: '36px',
+      color: titleColor,
+      stroke: '#000000',
+      strokeThickness: 4
+    }).setOrigin(0.5);
+
+    // Medal display (if earned)
+    if (medal) {
+      const medalIcons = { gold: '🥇', silver: '🥈', bronze: '🥉' };
+      const medalNames = { gold: 'GOLD', silver: 'SILVER', bronze: 'BRONZE' };
+
+      this.add.text(width / 2, height * 0.22, medalIcons[medal], {
+        fontSize: '64px'
+      }).setOrigin(0.5);
+
+      this.add.text(width / 2, height * 0.30, medalNames[medal], {
+        fontFamily: 'Arial Black',
+        fontSize: '28px',
+        color: medal === 'gold' ? '#FFD700' : medal === 'silver' ? '#C0C0C0' : '#CD7F32'
+      }).setOrigin(0.5);
+    } else if (!success) {
+      // Failure reason
+      this.add.text(width / 2, height * 0.25, this.finalData.reason || 'Objective not met', {
+        fontFamily: 'Arial',
+        fontSize: '20px',
+        color: '#FF6666'
+      }).setOrigin(0.5);
+    }
+
+    // Stats
+    const statsY = height * 0.40;
+    const lineHeight = 40;
+
+    this.add.text(width / 2, statsY, 'RESULTS', {
+      fontFamily: 'Arial',
+      fontSize: '24px',
+      fontStyle: 'bold',
+      color: '#FFFFFF'
+    }).setOrigin(0.5);
+
+    // IEDs Cleared
+    this.add.text(width * 0.3, statsY + lineHeight, 'Cleared:', {
+      fontFamily: 'Arial', fontSize: '20px', color: '#AAAAAA'
+    }).setOrigin(0, 0.5);
+    this.add.text(width * 0.7, statsY + lineHeight, `${this.finalData.neutralized}`, {
+      fontFamily: 'Arial', fontSize: '20px', color: '#00FF00'
+    }).setOrigin(1, 0.5);
+
+    // Perfects
+    this.add.text(width * 0.3, statsY + lineHeight * 2, 'Perfects:', {
+      fontFamily: 'Arial', fontSize: '20px', color: '#AAAAAA'
+    }).setOrigin(0, 0.5);
+    this.add.text(width * 0.7, statsY + lineHeight * 2, `${this.finalData.perfects}`, {
+      fontFamily: 'Arial', fontSize: '20px', color: '#FFD700'
+    }).setOrigin(1, 0.5);
+
+    // Score
+    this.add.text(width * 0.3, statsY + lineHeight * 3, 'Score:', {
+      fontFamily: 'Arial', fontSize: '20px', color: '#AAAAAA'
+    }).setOrigin(0, 0.5);
+    this.add.text(width * 0.7, statsY + lineHeight * 3, `${this.finalData.score}`, {
+      fontFamily: 'Arial', fontSize: '24px', fontStyle: 'bold', color: '#FFD700'
+    }).setOrigin(1, 0.5);
+
+    // Buttons
+    const retryBtn = this.add.text(width / 2, height * 0.72, 'RETRY CHALLENGE', {
+      fontFamily: 'Arial',
+      fontSize: '28px',
+      fontStyle: 'bold',
+      color: '#FFFFFF',
+      stroke: '#000000',
+      strokeThickness: 4
+    }).setOrigin(0.5);
+    retryBtn.setInteractive({ useHandCursor: true });
+    retryBtn.on('pointerover', () => retryBtn.setColor('#00FF00'));
+    retryBtn.on('pointerout', () => retryBtn.setColor('#FFFFFF'));
+    retryBtn.on('pointerdown', () => this.retryChallenge());
+
+    this.tweens.add({
+      targets: retryBtn,
+      alpha: 0.5,
+      duration: 700,
+      yoyo: true,
+      repeat: -1
+    });
+
+    const backBtn = this.add.text(width / 2, height * 0.82, 'Back to Challenges', {
+      fontFamily: 'Arial',
+      fontSize: '20px',
+      color: '#888888'
+    }).setOrigin(0.5);
+    backBtn.setInteractive({ useHandCursor: true });
+    backBtn.on('pointerover', () => backBtn.setColor('#FFFFFF'));
+    backBtn.on('pointerout', () => backBtn.setColor('#888888'));
+    backBtn.on('pointerdown', () => this.goToChallenges());
+
+    // Keyboard
+    this.input.keyboard.once('keydown-SPACE', () => this.retryChallenge());
+    this.input.keyboard.once('keydown-ENTER', () => this.retryChallenge());
+    this.input.keyboard.once('keydown-ESC', () => this.goToChallenges());
+  }
+
+  retryChallenge() {
+    this.cameras.main.fadeOut(300);
+    this.time.delayedCall(300, () => {
+      this.scene.start('GameScene', { mode: 'challenge', challengeId: this.finalData.challengeId });
+    });
+  }
+
+  goToChallenges() {
+    this.cameras.main.fadeOut(300);
+    this.time.delayedCall(300, () => {
+      this.scene.start('ChallengeSelectScene');
     });
   }
 
